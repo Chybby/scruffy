@@ -20,9 +20,9 @@ from flask import (
 app = Flask(__name__)
 app.config.from_object('config')
 
-POSTBACK_DONE = 'DONE'
-POSTBACK_PASS = 'PASS'
-POSTBACK_REMIND = 'REMIND'
+PAYLOAD_DONE = 'DONE'
+PAYLOAD_PASS = 'PASS'
+PAYLOAD_REMIND = 'REMIND'
 
 
 def call_send_API(message_data):
@@ -51,17 +51,17 @@ def send_bin_notification(recipient_id):
                 {
                     'content_type': 'text',
                     'title': 'Ok, done',
-                    'payload': POSTBACK_DONE,
+                    'payload': PAYLOAD_DONE,
                 },
                 {
                     'content_type': 'text',
                     'title': 'I can\'t today',
-                    'payload': POSTBACK_PASS,
+                    'payload': PAYLOAD_PASS,
                 },
                 {
                     'content_type': 'text',
                     'title': 'Remind me later',
-                    'payload': POSTBACK_REMIND,
+                    'payload': PAYLOAD_REMIND,
                 },
             ]
         }
@@ -89,11 +89,11 @@ def process_quick_reply(message):
 
     payload = message['message']['quick_reply']['payload']
 
-    if payload == POSTBACK_DONE:
+    if payload == PAYLOAD_DONE:
         send_text_message(sender_id, 'Thanks buddy')
-    elif payload == POSTBACK_PASS:
+    elif payload == PAYLOAD_PASS:
         send_text_message(sender_id, 'Someone else will have to do it today')
-    elif payload == POSTBACK_REMIND:
+    elif payload == PAYLOAD_REMIND:
         send_text_message(sender_id, 'Ok, I\'ll remind you this evening')
 
 
