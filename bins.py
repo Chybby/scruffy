@@ -30,7 +30,7 @@ def receive_message(methods=['POST']):
         print(data['entry'])
 
 
-app.route('/webhook')
+@app.route('/webhook')
 def validate_webhook(methods=['GET']):
     if (request.args['hub.mode'] == 'subscribe' and
         request.args['hub.verify_token'] == VERIFY_TOKEN):
