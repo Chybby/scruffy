@@ -21,10 +21,10 @@ def index():
 
 @app.route('/webhook')
 def receive_message(methods=['POST']):
-    data = request.body
+    data = request.get_json()
     print(data)
-    if (data.object == 'page'):
-        print(data.entry)
+    if (data['object'] == 'page'):
+        print(data['entry'])
 
 
 app.route('/webhook')
