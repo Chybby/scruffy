@@ -25,21 +25,6 @@ POSTBACK_PASS = 'PASS'
 POSTBACK_REMIND = 'REMIND'
 
 
-def load_state():
-    with open('state.json', 'r') as state_file:
-        return json.loads(state_file.read())
-
-
-state = load_state()
-
-
-@app.after_request
-def save_state(response):
-    with open('state.json', 'w') as state_file:
-        state_file.write(json.dumps(state))
-    return response
-
-
 def call_send_API(message_data):
     rs = requests.post('https://graph.facebook.com/v2.6/me/messages',
                        params={'access_token': PAGE_ACCESS_TOKEN},
@@ -61,30 +46,24 @@ def send_bin_notification(recipient_id):
             'id': recipient_id
         },
         'message': {
-            'attachment': {
-                'type': 'template',
-                'payload': {
-                    'template_type': 'button',
-                    'text': 'It\'s your turn to take the bins out today!',
-                    'buttons': [
-                        {
-                            'type': 'postback',
-                            'title': 'Ok, done',
-                            'payload': POSTBACK_DONE,
-                        },
-                        {
-                            'type': 'postback',
-                            'title': 'I can\'t today',
-                            'payload': POSTBACK_PASS,
-                        },
-                        {
-                            'type': 'postback',
-                            'title': 'Remind me later',
-                            'payload': POSTBACK_REMIND,
-                        },
-                    ]
-                }
-            }
+            'text': 'It\'s your turn to take the bins out today!',
+            'quick_replies': [
+                {
+                    'content_type': 'text',
+                    'title': 'Ok, done',
+                    'payload': POSTBACK_DONE,
+                },
+                {
+                    'content_type': 'text',
+                    'title': 'I can\'t today',
+                    'payload': POSTBACK_PASS,
+                },
+                {
+                    'content_type': 'text',
+                    'title': 'Remind me later',
+                    'payload': POSTBACK_REMIND,
+                },
+            ]
         }
     }
 
@@ -104,29 +83,11 @@ def send_text_message(recipient_id, text):
     call_send_API(message_data)
 
 
-def process_message(message):
-    print(message)
+def process_quick_reply(message):
     sender_id = int(message['sender']['id'])
-    recipient_id = int(message['recipient']['id'])
     time_of_message = int(message['timestamp'])
-    message_id = message['message']['mid']
-    message_text = message['message'].get('text')
-    message_attatchments = message['message'].get('attachments')
 
-    print('Message from %d to %d at %d with text \'%s\'' % (sender_id,
-                                                            recipient_id,
-                                                            time_of_message,
-                                                            message_text))
-
-    send_text_message(sender_id, 'not ready yet bro')
-    send_bin_notification(sender_id)
-
-
-def process_postback(message):
-    sender_id = int(message['sender']['id'])
-    recipient_id = int(message['recipient']['id'])
-    time_of_postback = int(message['timestamp'])
-    payload = message['postback']['payload']
+    payload = message['message']['quick_reply']['payload']
 
     if payload == POSTBACK_DONE:
         send_text_message(sender_id, 'Thanks buddy')
@@ -136,9 +97,17 @@ def process_postback(message):
         send_text_message(sender_id, 'Ok, I\'ll remind you this evening')
 
 
+def process_message(message):
+    sender_id = int(message['sender']['id'])
+    time_of_message = int(message['timestamp'])
+    message_text = message['message'].get('text')
+
+    send_text_message(sender_id, 'FYI: bot ain\'t ready yet')
+    send_bin_notification(sender_id)
+
+
 @app.route('/')
 def index():
-    app.logger.error('Info')
     return 'Hello World!'
 
 
@@ -152,9 +121,10 @@ def receive_message():
 
             for message in entry['messaging']:
                 if 'message' in message:
-                    process_message(message)
-                elif 'postback' in message:
-                    process_postback(message)
+                    if 'quick_reply' in message['message']:
+                        process_quick_reply(message)
+                    else:
+                        process_message(message)
 
     return ''
 
