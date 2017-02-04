@@ -3,6 +3,8 @@ from __future__ import (
     print_function,
 )
 
+import sys
+
 from config import VERIFY_TOKEN
 
 from flask import (
@@ -13,6 +15,7 @@ from flask import (
 app = Flask(__name__)
 app.config.from_object('config')
 
+sys.stdout = open('output.logs', 'w')
 
 @app.route('/')
 def index():
