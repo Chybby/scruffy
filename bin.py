@@ -130,7 +130,7 @@ def mark_as_forgot_done():
         done_id = pipe.lindex(REDIS_ROSTER, 0)
         FnScope.next_id = pipe.lindex(REDIS_ROSTER, 1)
         pipe.multi()
-        pipe.lpop(REDIS_ROSTER, 0)
+        pipe.lpop(REDIS_ROSTER)
         pipe.rpush(REDIS_ROSTER, done_id)
         pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
         pipe.ltrim(REDIS_PASSERS, 1, 0)
