@@ -52,8 +52,9 @@ def add_to_roster(user_id):
         roster = pipe.lrange(REDIS_ROSTER, 0, -1)
         if user_id not in roster:
             if roster:
-                roster_head = pipe.lpop(REDIS_ROSTER)
+                roster_head = pipe.lindex(REDIS_ROSTER, 0)
             pipe.multi()
+            pipe.lpop(REDIS_ROSTER)
             pipe.lpush(REDIS_ROSTER, user_id)
             if roster:
                 pipe.lpush(REDIS_ROSTER, roster_head)
@@ -110,8 +111,9 @@ def send_notification():
 
 def mark_as_done():
     def _mark_as_done(pipe):
-        done_id = pipe.lpop(REDIS_ROSTER)
+        done_id = pipe.lindex(REDIS_ROSTER, 0)
         pipe.multi()
+        pipe.lpop(REDIS_ROSTER)
         pipe.rpush(REDIS_ROSTER, done_id)
         pipe.set(REDIS_BINS_DONE, True)
         pipe.ltrim(REDIS_PASSERS, 1, 0)
@@ -124,9 +126,10 @@ def mark_as_forgot_done():
         next_id = None
 
     def _mark_as_forgot_done(pipe):
-        done_id = pipe.lpop(REDIS_ROSTER)
-        FnScope.next_id = pipe.lindex(REDIS_ROSTER, 0)
+        done_id = pipe.lindex(REDIS_ROSTER, 0)
+        FnScope.next_id = pipe.lindex(REDIS_ROSTER, 1)
         pipe.multi()
+        pipe.lpop(REDIS_ROSTER, 0)
         pipe.rpush(REDIS_ROSTER, done_id)
         pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
         pipe.ltrim(REDIS_PASSERS, 1, 0)
@@ -141,11 +144,12 @@ def mark_as_passed():
         next_id = None
         passers = []
     def _mark_as_passed(pipe):
-        passer_id = pipe.lpop(REDIS_ROSTER)
+        passer_id = pipe.lindex(REDIS_ROSTER, 0)
         FnScope.passers = pipe.lrange(REDIS_PASSERS, 0, -1)
-        if pipe.llen(REDIS_ROSTER) == len(FnScope.passers):
+        if pipe.llen(REDIS_ROSTER) - 1 == len(FnScope.passers):
             # Everyone has passed
             pipe.multi()
+            pipe.lpop(REDIS_ROSTER)
             FnScope.passers.append(passer_id)
             for i in xrange(len(FnScope.passers) - 1, -1, -1):
                 pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
@@ -154,9 +158,10 @@ def mark_as_passed():
             pipe.set(REDIS_BINS_DONE, True)
             FnScope.was_passed = False
         else:
-            for i in xrange(len(FnScope.passers) + 1):
-                FnScope.next_id = pipe.lpop(REDIS_ROSTER)
+            FnScope.next_id = pipe.lindex(REDIS_ROSTER, len(FnScope.passers) + 1)
             pipe.multi()
+            for i in xrange(len(FnScope.passers) + 1):
+                pipe.lpop(REDIS_ROSTER)
             pipe.rpush(REDIS_PASSERS, passer_id)
             FnScope.passers.append(passer_id)
             for i in xrange(len(FnScope.passers) - 1, -1, -1):
