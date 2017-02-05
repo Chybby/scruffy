@@ -108,7 +108,8 @@ def process_message(message):
 
 @app.route('/')
 def index():
-    return 'Hello World!'
+    # Show web ui
+    return "There'll be a web ui here someday maybe"
 
 
 @app.route('/webhook', methods=['POST'])
@@ -136,8 +137,7 @@ def validate_webhook():
         # Validating webhook
         return request.args['hub.challenge']
 
-    # Show web ui
-    return "There'll be a web ui here someday"
+    abort(403)
 
 
 if __name__ == '__main__':
