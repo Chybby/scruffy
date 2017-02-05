@@ -6,16 +6,20 @@ from __future__ import (
 import json
 import requests
 
-from config import (
-    VERIFY_TOKEN,
-    PAGE_ACCESS_TOKEN,
-)
-
 from flask import (
     Flask,
     make_response,
     request,
 )
+
+from redis import StrictRedis
+
+from config import (
+    REDIS_PORT,
+    VERIFY_TOKEN,
+    PAGE_ACCESS_TOKEN,
+)
+
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -23,6 +27,13 @@ app.config.from_object('config')
 PAYLOAD_DONE = 'DONE'
 PAYLOAD_PASS = 'PASS'
 PAYLOAD_REMIND = 'REMIND'
+
+
+def get_redis():
+    redis = getattr(g, '_redis', None)
+    if redis is None:
+        redis = g._redis = StrictRedis(host='localhost', port=REDIS_PORT, db=0)
+    return redis
 
 
 def call_send_API(message_data):
