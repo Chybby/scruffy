@@ -87,7 +87,7 @@ def send_reminder():
 
     get_redis().transaction(_send_reminder, REDIS_REMIND, REDIS_ROSTER)
     if FnScope.needs_reminding:
-        send_bin_notification(FnScope.user_id)
+        send_bin_notification(FnScope.user_id, reminder=False)
 
 def send_notification():
     class FnScope:
@@ -211,7 +211,7 @@ def send_naughty_notification(recipient_id):
     call_send_API(message_data)
 
 
-def send_bin_notification(recipient_id, passers=[]):
+def send_bin_notification(recipient_id, passers=[], reminder=True):
     message_data = {
         'recipient': {
             'id': recipient_id
@@ -229,14 +229,16 @@ def send_bin_notification(recipient_id, passers=[]):
                     'title': 'I can\'t today',
                     'payload': PAYLOAD_PASS,
                 },
-                {
-                    'content_type': 'text',
-                    'title': 'Remind me later',
-                    'payload': PAYLOAD_REMIND,
-                },
             ]
         }
     }
+
+    if reminder:
+        message_data['message']['quick_replies'].append({
+            'content_type': 'text',
+            'title': 'Remind me later',
+            'payload': PAYLOAD_REMIND,
+        })
 
     call_send_API(message_data)
 
