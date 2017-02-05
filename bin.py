@@ -46,7 +46,8 @@ def get_redis():
 
 
 def add_to_roster(user_id):
-    was_added = False
+    class FnScope:
+        was_added = False
     def _add_to_roster(pipe):
         roster = pipe.lrange(REDIS_ROSTER, 0, -1)
         if user_id not in roster:
@@ -56,11 +57,11 @@ def add_to_roster(user_id):
             pipe.lpush(REDIS_ROSTER, user_id)
             if roster:
                 pipe.lpush(REDIS_ROSTER, roster_head)
-            was_added = True
+            FnScope.was_added = True
 
     get_redis().transaction(_add_to_roster, REDIS_ROSTER)
 
-    return was_added
+    return FnScope.was_added
 
 
 def get_last_messaged():
@@ -73,37 +74,39 @@ def set_remind():
         pipe.set(REDIS_LAST_MESSAGED, None)
 
 def send_reminder():
-    needs_reminding = False
-    user_id = None
+    class FnScope:
+        needs_reminding = False
+        user_id = None
     def _send_reminder(pipe):
-        needs_reminding = bool(pipe.get(REDIS_REMIND))
-        if needs_reminding:
-            user_id = pipe.lindex(REDIS_ROSTER, 0)
+        FnScope.needs_reminding = bool(pipe.get(REDIS_REMIND))
+        if FnScope.needs_reminding:
+            FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
             pipe.multi()
-            pipe.set(REDIS_LAST_MESSAGED, user_id)
+            pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
             pipe.set(REDIS_REMIND, False)
 
     get_redis().transaction(_send_reminder, REDIS_REMIND, REDIS_ROSTER)
-    if needs_reminding:
-        send_bin_notification(user_id)
+    if FnScope.needs_reminding:
+        send_bin_notification(FnScope.user_id)
 
 def send_notification():
-    was_naughty = False
-    user_id = None
+    class FnScope:
+        was_naughty = False
+        user_id = None
     def _send_notification(pipe):
-        user_id = pipe.lindex(REDIS_ROSTER, 0)
+        FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
         bins_done = pipe.get(REDIS_BINS_DONE)
         if not bins_done:
-            was_naughty = True
+            FnScope.was_naughty = True
         pipe.multi()
-        pipe.set(REDIS_LAST_MESSAGED, user_id)
+        pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
         pipe.set(REDIS_BINS_DONE, False)
 
     get_redis().transaction(_send_notification, REDIS_ROSTER, REDIS_BINS_DONE)
-    if was_naughty:
-        send_naughty_notification(user_id)
+    if FnScope.was_naughty:
+        send_naughty_notification(FnScope.user_id)
     else:
-        send_bin_notification(user_id)
+        send_bin_notification(FnScope.user_id)
 
 def mark_as_done():
     def _mark_as_done(pipe):
@@ -117,48 +120,50 @@ def mark_as_done():
     get_redis().transaction(_mark_as_done, REDIS_ROSTER)
 
 def mark_as_forgot_done():
-    next_id = None
+    class FnScope:
+        next_id = None
 
     def _mark_as_forgot_done(pipe):
         done_id = pipe.lpop(REDIS_ROSTER)
-        next_id = pipe.lindex(REDIS_ROSTER, 0)
+        FnScope.next_id = pipe.lindex(REDIS_ROSTER, 0)
         pipe.multi()
         pipe.rpush(REDIS_ROSTER, done_id)
-        pipe.set(REDIS_LAST_MESSAGED, next_id)
+        pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
         pipe.ltrim(REDIS_PASSERS, 1, 0)
 
     get_redis().transaction(_mark_as_forgot_done, REDIS_ROSTER)
-    return next_id
+    return FnScope.next_id
 
 
 def mark_as_passed():
-    was_passed = True
-    next_id = None
-    passers = []
+    class FnScope:
+        was_passed = True
+        next_id = None
+        passers = []
     def _mark_as_passed(pipe):
         passer_id = pipe.lpop(REDIS_ROSTER)
-        passers = pipe.lrange(REDIS_PASSERS, 0, -1)
-        if pipe.llen(REDIS_ROSTER) == len(passers):
+        FnScope.passers = pipe.lrange(REDIS_PASSERS, 0, -1)
+        if pipe.llen(REDIS_ROSTER) == len(FnScope.passers):
             # Everyone has passed
             pipe.multi()
-            passers.append(passer_id)
-            for i in xrange(0, len(passers), -1):
-                pipe.lpush(REDIS_ROSTER, passers[i])
+            FnScope.passers.append(passer_id)
+            for i in xrange(0, len(FnScope.passers), -1):
+                pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
             pipe.ltrim(REDIS_PASSERS, 1, 0)
-            was_passed = False
+            FnScope.was_passed = False
         else:
-            for i in xrange(len(passers) + 1):
-                next_id = pipe.lpop(REDIS_ROSTER)
+            for i in xrange(len(FnScope.passers) + 1):
+                FnScope.next_id = pipe.lpop(REDIS_ROSTER)
             pipe.multi()
             pipe.rpush(REDIS_PASSERS, passer_id)
-            passers.append(passer_id)
-            for i in xrange(0, len(passers), -1):
-                pipe.lpush(REDIS_ROSTER, passers[i])
-            pipe.lpush(REDIS_ROSTER, next_id)
-            pipe.set(REDIS_LAST_MESSAGED, next_id)
+            FnScope.passers.append(passer_id)
+            for i in xrange(0, len(FnScope.passers), -1):
+                pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
+            pipe.lpush(REDIS_ROSTER, FnScope.next_id)
+            pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
 
     get_redis().transaction(_mark_as_passed, REDIS_ROSTER, REDIS_PASSERS)
-    return (was_passed, next_id, passers)
+    return (FnScope.was_passed, FnScope.next_id, FnScope.passers)
 
 
 def call_send_API(message_data):
