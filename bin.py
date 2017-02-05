@@ -50,10 +50,12 @@ def add_to_roster(user_id):
     def _add_to_roster(pipe):
         roster = pipe.lrange(REDIS_ROSTER, 0, -1)
         if user_id not in roster:
-            roster_head = pipe.lpop(REDIS_ROSTER)
+            if roster:
+                roster_head = pipe.lpop(REDIS_ROSTER)
             pipe.multi()
             pipe.lpush(REDIS_ROSTER, user_id)
-            pipe.lpush(REDIS_ROSTER, roster_head)
+            if roster:
+                pipe.lpush(REDIS_ROSTER, roster_head)
             was_added = True
 
     get_redis().transaction(_add_to_roster, REDIS_ROSTER)
@@ -194,7 +196,7 @@ def send_naughty_notification(recipient_id):
                 },
                 {
                     'content_type': 'text',
-                    'title': 'I emptied you but forgot to tell you',
+                    'title': 'I forgot to say done',
                     'payload': PAYLOAD_FORGOT,
                 },
             ]
@@ -282,12 +284,6 @@ def process_message(message):
     sender_id = message['sender']['id']
     time_of_message = int(message['timestamp'])
     message_text = message['message'].get('text')
-
-    print('sending naughty notification')
-
-    send_naughty_notification(sender_id)
-
-    print('done')
 
     if add_to_roster(sender_id):
         send_text_message(sender_id, 'The world could always use more bin emptiers')
