@@ -73,6 +73,7 @@ def set_remind():
     with get_redis().pipeline() as pipe:
         pipe.set(REDIS_REMIND, True)
         pipe.set(REDIS_LAST_MESSAGED, None)
+        pipe.execute()
 
 def send_reminder():
     class FnScope:
