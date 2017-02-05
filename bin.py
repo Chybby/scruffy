@@ -79,7 +79,7 @@ def send_reminder():
         needs_reminding = False
         user_id = None
     def _send_reminder(pipe):
-        FnScope.needs_reminding = bool(pipe.get(REDIS_REMIND))
+        FnScope.needs_reminding = pipe.get(REDIS_REMIND) == 'True'
         if FnScope.needs_reminding:
             FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
             pipe.multi()
@@ -96,7 +96,7 @@ def send_notification():
         user_id = None
     def _send_notification(pipe):
         FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
-        bins_done = pipe.get(REDIS_BINS_DONE)
+        bins_done = pipe.get(REDIS_BINS_DONE) == 'True'
         if not bins_done:
             FnScope.was_naughty = True
         pipe.multi()
