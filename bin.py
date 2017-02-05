@@ -150,6 +150,8 @@ def mark_as_passed():
             for i in xrange(0, len(FnScope.passers), -1):
                 pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
             pipe.ltrim(REDIS_PASSERS, 1, 0)
+            # Avoid berating the next person for not emptying the bin
+            pipe.set(REDIS_BINS_DONE, True)
             FnScope.was_passed = False
         else:
             for i in xrange(len(FnScope.passers) + 1):
@@ -217,7 +219,7 @@ def send_bin_notification(recipient_id, passers=[], reminder=True):
             'id': recipient_id
         },
         'message': {
-            'text': 'It\'s your turn to take the bins out today!',
+            'text': 'It\'s your turn to empty me today!',
             'quick_replies': [
                 {
                     'content_type': 'text',
