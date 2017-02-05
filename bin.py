@@ -9,6 +9,7 @@ from time import sleep
 
 from flask import (
     Flask,
+    g,
     make_response,
     request,
 )
@@ -164,8 +165,8 @@ def call_send_API(message_data):
                        json=message_data)
 
     if rs.status_code != requests.codes.ok:
-        sleep(10)
-        call_send_API(message_data)
+        print('Couldn\'t send message, got status %d' % rs.status_code)
+        print(rs.text)
 
 
 def send_naughty_notification(recipient_id):
@@ -282,7 +283,11 @@ def process_message(message):
     time_of_message = int(message['timestamp'])
     message_text = message['message'].get('text')
 
+    print('sending naughty notification')
+
     send_naughty_notification(sender_id)
+
+    print('done')
 
     if add_to_roster(sender_id):
         send_text_message(sender_id, 'The world could always use more bin emptiers')
