@@ -161,10 +161,10 @@ def mark_as_passed():
         else:
             FnScope.next_id = pipe.lindex(REDIS_ROSTER, len(FnScope.passers) + 1)
             pipe.multi()
+            FnScope.passers.append(passer_id)
             for i in xrange(len(FnScope.passers) + 1):
                 pipe.lpop(REDIS_ROSTER)
             pipe.rpush(REDIS_PASSERS, passer_id)
-            FnScope.passers.append(passer_id)
             for i in xrange(len(FnScope.passers) - 1, -1, -1):
                 pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
             pipe.lpush(REDIS_ROSTER, FnScope.next_id)
@@ -247,6 +247,10 @@ def send_bin_notification(recipient_id, passers=[], reminder=True):
             'title': 'Remind me later',
             'payload': PAYLOAD_REMIND,
         })
+
+    if passers:
+        # TODO: list the passers and bm them
+        pass
 
     call_send_API(message_data)
 
