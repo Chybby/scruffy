@@ -151,9 +151,7 @@ def mark_as_passed():
             # Everyone has passed
             pipe.multi()
             pipe.lpop(REDIS_ROSTER)
-            FnScope.passers.append(passer_id)
-            for i in xrange(len(FnScope.passers) - 1, -1, -1):
-                pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
+            pipe.rpush(REDIS_ROSTER, passer_id)
             pipe.ltrim(REDIS_PASSERS, 1, 0)
             # Avoid berating the next person for not emptying the bin
             pipe.set(REDIS_BINS_DONE, True)
