@@ -38,6 +38,12 @@ REDIS_REMIND = 'remind'
 REDIS_LAST_MESSAGED = 'last_messaged'
 
 
+###
+#
+# Redis Functions
+#
+###
+
 def get_redis():
     redis = getattr(g, '_redis', None)
     if redis is None:
@@ -69,46 +75,20 @@ def get_last_messaged():
     return get_redis().get(REDIS_LAST_MESSAGED)
 
 
+def get_info_from_redis(user_id):
+    return get_redis().get(user_id + 'info')
+
+
+def set_info_in_redis(user_id, info):
+    get_redis().set(user_id + 'info', info)
+
+
 def set_remind():
     with get_redis().pipeline() as pipe:
         pipe.set(REDIS_REMIND, True)
         pipe.set(REDIS_LAST_MESSAGED, None)
         pipe.execute()
 
-def send_reminder():
-    class FnScope:
-        needs_reminding = False
-        user_id = None
-    def _send_reminder(pipe):
-        FnScope.needs_reminding = pipe.get(REDIS_REMIND) == 'True'
-        if FnScope.needs_reminding:
-            FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
-            pipe.multi()
-            pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
-            pipe.set(REDIS_REMIND, False)
-
-    get_redis().transaction(_send_reminder, REDIS_REMIND, REDIS_ROSTER)
-    if FnScope.needs_reminding:
-        send_bin_notification(FnScope.user_id, reminder=False)
-
-def send_notification():
-    class FnScope:
-        was_naughty = False
-        user_id = None
-    def _send_notification(pipe):
-        FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
-        bins_done = pipe.get(REDIS_BINS_DONE) == 'True'
-        if not bins_done:
-            FnScope.was_naughty = True
-        pipe.multi()
-        pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
-        pipe.set(REDIS_BINS_DONE, False)
-
-    get_redis().transaction(_send_notification, REDIS_ROSTER, REDIS_BINS_DONE)
-    if FnScope.was_naughty:
-        send_naughty_notification(FnScope.user_id)
-    else:
-        send_bin_notification(FnScope.user_id)
 
 def mark_as_done():
     def _mark_as_done(pipe):
@@ -121,6 +101,7 @@ def mark_as_done():
         pipe.set(REDIS_LAST_MESSAGED, None)
 
     get_redis().transaction(_mark_as_done, REDIS_ROSTER)
+
 
 def mark_as_forgot_done():
     class FnScope:
@@ -171,6 +152,93 @@ def mark_as_passed():
     get_redis().transaction(_mark_as_passed, REDIS_ROSTER, REDIS_PASSERS)
     return (FnScope.was_passed, FnScope.next_id, FnScope.passers)
 
+###
+#
+# Util Functions
+#
+###
+
+def get_info(user_id):
+    info = get_info_from_redis(user_id)
+    if info:
+        return json.loads(info)
+
+    rs = requests.get('https://graph.facebook.com/v2.8/%s?fields=name,picture&access_token=%s' %
+                      (user_id, PAGE_ACCESS_TOKEN))
+    info = rs.json()
+    set_info_in_redis(user_id, json.dumps(info))
+    return info
+
+
+def create_insult(passers):
+    if not passers:
+        return ''
+
+    users = passers[:]
+    names = []
+    while users:
+        user = users.pop()
+        fist_name = get_info(user)['name'].split()[0]
+        if len(users) == 0:
+            names.append(fist_name)
+        elif len(users) == 1:
+            names.append(fist_name)
+            names.append('and')
+        else:
+            names.append(fist_name + ',')
+
+    if len(names) == 1:
+        return names[0] + ' is being a fuck'
+
+    return ' '.join(names) + ' are being fucks'
+
+###
+#
+# Cron Functions
+#
+###
+
+def send_reminder():
+    class FnScope:
+        needs_reminding = False
+        user_id = None
+    def _send_reminder(pipe):
+        FnScope.needs_reminding = pipe.get(REDIS_REMIND) == 'True'
+        if FnScope.needs_reminding:
+            FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
+            pipe.multi()
+            pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
+            pipe.set(REDIS_REMIND, False)
+
+    get_redis().transaction(_send_reminder, REDIS_REMIND, REDIS_ROSTER)
+    if FnScope.needs_reminding:
+        send_bin_notification(FnScope.user_id, reminder=True)
+
+
+def send_notification():
+    class FnScope:
+        was_naughty = False
+        user_id = None
+    def _send_notification(pipe):
+        FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
+        bins_done = pipe.get(REDIS_BINS_DONE) == 'True'
+        if not bins_done:
+            FnScope.was_naughty = True
+        pipe.multi()
+        pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
+        pipe.set(REDIS_BINS_DONE, False)
+
+    get_redis().transaction(_send_notification, REDIS_ROSTER, REDIS_BINS_DONE)
+    if FnScope.was_naughty:
+        send_naughty_notification(FnScope.user_id)
+    else:
+        send_bin_notification(FnScope.user_id)
+
+###
+#
+# Messenger Functions
+#
+###
 
 def call_send_API(message_data):
     rs = requests.post('https://graph.facebook.com/v2.6/me/messages',
@@ -217,7 +285,7 @@ def send_naughty_notification(recipient_id):
     call_send_API(message_data)
 
 
-def send_bin_notification(recipient_id, passers=[], reminder=True):
+def send_bin_notification(recipient_id, passers=[], reminder=False):
     message_data = {
         'recipient': {
             'id': recipient_id
@@ -239,7 +307,7 @@ def send_bin_notification(recipient_id, passers=[], reminder=True):
         }
     }
 
-    if reminder:
+    if not reminder:
         message_data['message']['quick_replies'].append({
             'content_type': 'text',
             'title': 'Remind me later',
@@ -247,8 +315,8 @@ def send_bin_notification(recipient_id, passers=[], reminder=True):
         })
 
     if passers:
-        # TODO: list the passers and bm them
-        pass
+        message_data['message']['text'] = create_insult(passers) + ', so it\'s '
+        'your turn to empty me today.'
 
     call_send_API(message_data)
 
@@ -306,6 +374,12 @@ def process_message(message):
         send_text_message(sender_id, 'The world could always use more bin emptiers')
     else:
         send_text_message(sender_id, 'Don\'t you have something better to do than talking to a bin?')
+
+###
+#
+# Flask Routes
+#
+###
 
 @app.route('/')
 def index():
