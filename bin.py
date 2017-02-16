@@ -410,10 +410,17 @@ def process_message(message):
     sender_id = message['sender']['id']
     time_of_message = int(message['timestamp'])
     message_text = message['message'].get('text')
+    message_attachments = message['message'].get('attachments')
 
     session_id = "%s_%d" % (sender_id, random.randint(1000000000, 9999999999))
 
-    get_wit().run_actions(session_id, message_text, {})
+    if message_text:
+        get_wit().run_actions(session_id, message_text, {})
+    elif message_attachments:
+        sticker_id = message_attachments['payload']['sticker_id']
+        if sticker_id == 369239263222822:
+            # thumbs up sticker
+            get_wit().run_actions(session_id, '(y)', {})
 
 ###
 #
