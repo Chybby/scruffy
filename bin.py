@@ -15,11 +15,13 @@ from flask import (
 )
 
 from redis import StrictRedis
+from wit import Wit
 
 from config import (
     REDIS_PORT,
     VERIFY_TOKEN,
     PAGE_ACCESS_TOKEN,
+    WITAI_ACCESS_TOKEN,
 )
 
 
@@ -33,10 +35,92 @@ PAYLOAD_FORGOT = 'FORGOT'
 
 REDIS_ROSTER = 'roster'
 REDIS_PASSERS = 'passers'
-REDIS_BINS_DONE = 'bins_done'
 REDIS_REMIND = 'remind'
 REDIS_LAST_MESSAGED = 'last_messaged'
 
+###
+#
+# Wit.ai functions
+#
+###
+
+def wit_send(request, response):
+    user_id = request['session_id'].split('_')[0]
+    send_text_message(user_id, response['text'])
+
+
+def wit_done(request):
+    user_id = request['session_id'].split('_')[0]
+    if get_last_messaged() == user_id:
+        mark_as_done()
+        return {'success': 1}
+
+    return {'not_your_turn': 1}
+
+
+def wit_pass(request):
+    user_id = request['session_id'].split('_')[0]
+    if get_last_messaged() == user_id:
+        was_passed = mark_as_passed()
+        if was_passed:
+            return {'users_left': 1}
+        else:
+            return {'everyone_passed': 1}
+
+    return {'not_your_turn': 1}
+
+
+def wit_remind(request):
+    user_id = request['session_id'].split('_')[0]
+    if get_last_messaged() == user_id:
+        # TODO: don't do this if it is past 8
+        set_remind()
+        return {'success': 1}
+
+    return {'not_your_turn': 1}
+
+
+def wit_next(request):
+    return {'next': get_info(get_roster()[0])['name']}
+
+
+def wit_roster(request):
+    named_roster = map(lambda x: get_info(x)['name'], get_roster())
+    string_roster = ', '.join(named_roster)
+    return {'roster': string_roster}
+
+
+def wit_notify(request):
+    send_notification()
+    return {}
+
+
+def wit_add_new(request):
+    user_id = request['session_id'].split('_')[0]
+    was_added = add_to_roster(user_id)
+    if was_added:
+        return {'new': 1}
+    else:
+        return {'existing': 1}
+
+
+def get_wit():
+    wit_client = getattr(g, '_wit_client', None)
+    if wit_client is None:
+        actions = {
+            'send': wit_send,
+            'done': wit_done,
+            'pass': wit_pass,
+            'remind': wit_remind,
+            'next': wit_next,
+            'roster': wit_roster,
+            'notify': wit_notify,
+            'add_new': wit_add_new,
+        }
+
+        wit_client = g._wit_client = Wit(access_token=WITAI_ACCESS_TOKEN,
+                                         actions=actions)
+    return wit_client
 
 ###
 #
@@ -49,6 +133,10 @@ def get_redis():
     if redis is None:
         redis = g._redis = StrictRedis(host='localhost', port=REDIS_PORT, db=0)
     return redis
+
+
+def get_roster():
+    return get_redis().lrange(REDIS_ROSTER, 0, -1)
 
 
 def add_to_roster(user_id):
@@ -69,6 +157,10 @@ def add_to_roster(user_id):
     get_redis().transaction(_add_to_roster, REDIS_ROSTER)
 
     return FnScope.was_added
+
+
+def get_passers():
+    return get_redis().lrange(REDIS_PASSERS, 0, -1)
 
 
 def get_last_messaged():
@@ -96,61 +188,41 @@ def mark_as_done():
         pipe.multi()
         pipe.lpop(REDIS_ROSTER)
         pipe.rpush(REDIS_ROSTER, done_id)
-        pipe.set(REDIS_BINS_DONE, True)
         pipe.ltrim(REDIS_PASSERS, 1, 0)
         pipe.set(REDIS_LAST_MESSAGED, None)
+        pipe.set(REDIS_REMIND, False)
 
     get_redis().transaction(_mark_as_done, REDIS_ROSTER)
-
-
-def mark_as_forgot_done():
-    class FnScope:
-        next_id = None
-
-    def _mark_as_forgot_done(pipe):
-        done_id = pipe.lindex(REDIS_ROSTER, 0)
-        FnScope.next_id = pipe.lindex(REDIS_ROSTER, 1)
-        pipe.multi()
-        pipe.lpop(REDIS_ROSTER)
-        pipe.rpush(REDIS_ROSTER, done_id)
-        pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
-        pipe.ltrim(REDIS_PASSERS, 1, 0)
-
-    get_redis().transaction(_mark_as_forgot_done, REDIS_ROSTER)
-    return FnScope.next_id
 
 
 def mark_as_passed():
     class FnScope:
         was_passed = True
-        next_id = None
-        passers = []
     def _mark_as_passed(pipe):
         passer_id = pipe.lindex(REDIS_ROSTER, 0)
-        FnScope.passers = pipe.lrange(REDIS_PASSERS, 0, -1)
-        if pipe.llen(REDIS_ROSTER) - 1 == len(FnScope.passers):
+        passers = pipe.lrange(REDIS_PASSERS, 0, -1)
+        if pipe.llen(REDIS_ROSTER) - 1 == len(passers):
             # Everyone has passed
             pipe.multi()
             pipe.lpop(REDIS_ROSTER)
             pipe.rpush(REDIS_ROSTER, passer_id)
             pipe.ltrim(REDIS_PASSERS, 1, 0)
-            # Avoid berating the next person for not emptying the bin
-            pipe.set(REDIS_BINS_DONE, True)
             FnScope.was_passed = False
         else:
-            FnScope.next_id = pipe.lindex(REDIS_ROSTER, len(FnScope.passers) + 1)
+            next_id = pipe.lindex(REDIS_ROSTER, len(passers) + 1)
             pipe.multi()
-            FnScope.passers.append(passer_id)
-            for i in xrange(len(FnScope.passers) + 1):
+            passers.append(passer_id)
+            for i in xrange(len(passers) + 1):
                 pipe.lpop(REDIS_ROSTER)
             pipe.rpush(REDIS_PASSERS, passer_id)
-            for i in xrange(len(FnScope.passers) - 1, -1, -1):
-                pipe.lpush(REDIS_ROSTER, FnScope.passers[i])
-            pipe.lpush(REDIS_ROSTER, FnScope.next_id)
-            pipe.set(REDIS_LAST_MESSAGED, FnScope.next_id)
+            for i in xrange(len(passers) - 1, -1, -1):
+                pipe.lpush(REDIS_ROSTER, passers[i])
+            pipe.lpush(REDIS_ROSTER, next_id)
+        pipe.set(REDIS_LAST_MESSAGED, None)
+        pipe.set(REDIS_REMIND, False)
 
     get_redis().transaction(_mark_as_passed, REDIS_ROSTER, REDIS_PASSERS)
-    return (FnScope.was_passed, FnScope.next_id, FnScope.passers)
+    return FnScope.was_passed
 
 ###
 #
@@ -221,14 +293,13 @@ def send_notification():
         user_id = None
     def _send_notification(pipe):
         FnScope.user_id = pipe.lindex(REDIS_ROSTER, 0)
-        bins_done = pipe.get(REDIS_BINS_DONE) == 'True'
-        if not bins_done:
+        if FnScope.user_id == pipe.get(REDIS_LAST_MESSAGED):
             FnScope.was_naughty = True
         pipe.multi()
         pipe.set(REDIS_LAST_MESSAGED, FnScope.user_id)
-        pipe.set(REDIS_BINS_DONE, False)
 
-    get_redis().transaction(_send_notification, REDIS_ROSTER, REDIS_BINS_DONE)
+    get_redis().transaction(_send_notification, REDIS_ROSTER,
+                                                REDIS_LAST_MESSAGED)
     if FnScope.was_naughty:
         send_naughty_notification(FnScope.user_id)
     else:
@@ -285,7 +356,7 @@ def send_naughty_notification(recipient_id):
     call_send_API(message_data)
 
 
-def send_bin_notification(recipient_id, passers=[], reminder=False):
+def send_bin_notification(recipient_id, reminder=False):
     message_data = {
         'recipient': {
             'id': recipient_id
@@ -313,10 +384,10 @@ def send_bin_notification(recipient_id, passers=[], reminder=False):
             'title': 'Remind me later',
             'payload': PAYLOAD_REMIND,
         })
-
-    if passers:
-        message_data['message']['text'] = create_insult(passers) + ', so it\'s '
-        'your turn to empty me today.'
+        passers = get_passers()
+        if passers:
+            message_data['message']['text'] = create_insult(passers) + ', so it\'s '
+            'your turn to empty me today.'
 
     call_send_API(message_data)
 
@@ -334,46 +405,14 @@ def send_text_message(recipient_id, text):
     call_send_API(message_data)
 
 
-def process_quick_reply(message):
-    sender_id = message['sender']['id']
-    time_of_message = int(message['timestamp'])
-
-    if sender_id != get_last_messaged():
-        # Someone is trying to send a quick reply when they shouldn't be able to
-        send_text_message(sender_id, "Stop trying to break me :(")
-        return
-
-    payload = message['message']['quick_reply']['payload']
-
-    if payload == PAYLOAD_DONE:
-        mark_as_done()
-        send_text_message(sender_id, 'Thanks buddy, I feel so refreshed')
-    elif payload == PAYLOAD_PASS:
-        was_passed, next_id, passers = mark_as_passed()
-        if not was_passed:
-            send_text_message(sender_id, 'Guess I\'m staying full today :(')
-        else:
-            send_text_message(sender_id, 'Ok, I\'ll ask someone else to empty me')
-            send_bin_notification(next_id, passers=passers)
-    elif payload == PAYLOAD_REMIND:
-        # TODO: don't do this if it's past 8pm
-        set_remind()
-        send_text_message(sender_id, 'Ok, I\'ll remind you this evening')
-    elif payload == PAYLOAD_FORGOT:
-        next_id = mark_as_forgot_done()
-        send_text_message(sender_id, 'All good, I\'ll ask someone else then')
-        send_bin_notification(next_id)
-
-
 def process_message(message):
     sender_id = message['sender']['id']
     time_of_message = int(message['timestamp'])
     message_text = message['message'].get('text')
 
-    if add_to_roster(sender_id):
-        send_text_message(sender_id, 'The world could always use more bin emptiers')
-    else:
-        send_text_message(sender_id, 'Don\'t you have something better to do than talking to a bin?')
+    session_id = "%s_%d" % (sender_id, time_of_message)
+
+    get_wit().run_actions(session_id, message_text, {})
 
 ###
 #
@@ -397,10 +436,7 @@ def receive_message():
 
             for message in entry['messaging']:
                 if 'message' in message:
-                    if 'quick_reply' in message['message']:
-                        process_quick_reply(message)
-                    else:
-                        process_message(message)
+                    process_message(message)
 
     return ''
 
