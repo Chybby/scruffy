@@ -81,11 +81,11 @@ def wit_remind(request):
 
 
 def wit_next(request):
-    return {'next': get_info(get_roster()[0])['name']}
+    return {'next': get_info(get_roster()[0])['first_name']}
 
 
 def wit_roster(request):
-    named_roster = map(lambda x: get_info(x)['name'], get_roster())
+    named_roster = map(lambda x: get_info(x)['first_name'], get_roster())
     string_roster = ', '.join(named_roster)
     return {'roster': string_roster}
 
@@ -235,7 +235,7 @@ def get_info(user_id):
     if info:
         return json.loads(info)
 
-    rs = requests.get('https://graph.facebook.com/v2.8/%s?fields=name,picture&access_token=%s' %
+    rs = requests.get('https://graph.facebook.com/v2.8/%s&access_token=%s' %
                       (user_id, PAGE_ACCESS_TOKEN))
     info = rs.json()
     set_info_in_redis(user_id, json.dumps(info))
@@ -250,7 +250,7 @@ def create_insult(passers):
     names = []
     while users:
         user = users.pop()
-        fist_name = get_info(user)['name'].split()[0]
+        fist_name = get_info(user)['first_name'].split()[0]
         if len(users) == 0:
             names.append(fist_name)
         elif len(users) == 1:
