@@ -5,6 +5,7 @@ from __future__ import (
 
 import json
 import requests
+import random
 from time import sleep
 
 from flask import (
@@ -410,7 +411,7 @@ def process_message(message):
     time_of_message = int(message['timestamp'])
     message_text = message['message'].get('text')
 
-    session_id = "%s_%d" % (sender_id, time_of_message)
+    session_id = "%s_%d" % (sender_id, random.randint(1000000000, 9999999999))
 
     get_wit().run_actions(session_id, message_text, {})
 
