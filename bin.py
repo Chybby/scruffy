@@ -250,7 +250,7 @@ def create_insult(passers):
     names = []
     while users:
         user = users.pop()
-        fist_name = get_info(user)['first_name'].split()[0]
+        fist_name = get_info(user)['first_name']
         if len(users) == 0:
             names.append(fist_name)
         elif len(users) == 1:
