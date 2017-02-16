@@ -417,7 +417,7 @@ def process_message(message):
     if message_text:
         get_wit().run_actions(session_id, message_text, {})
     elif message_attachments:
-        sticker_id = message_attachments['payload']['sticker_id']
+        sticker_id = message_attachments[0]['payload']['sticker_id']
         if sticker_id == 369239263222822:
             # thumbs up sticker
             get_wit().run_actions(session_id, '(y)', {})
