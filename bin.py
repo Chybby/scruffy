@@ -235,7 +235,7 @@ def get_info(user_id):
     if info:
         return json.loads(info)
 
-    rs = requests.get('https://graph.facebook.com/v2.8/%s&access_token=%s' %
+    rs = requests.get('https://graph.facebook.com/v2.8/%s?access_token=%s' %
                       (user_id, PAGE_ACCESS_TOKEN))
     info = rs.json()
     set_info_in_redis(user_id, json.dumps(info))
