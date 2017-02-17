@@ -202,7 +202,6 @@ def set_info_in_redis(user_id, info):
 def set_remind():
     with get_redis().pipeline() as pipe:
         pipe.set(REDIS_REMIND, True)
-        pipe.set(REDIS_LAST_MESSAGED, None)
         pipe.execute()
 
 
