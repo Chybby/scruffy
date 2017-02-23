@@ -413,8 +413,8 @@ def send_bin_notification(recipient_id, reminder=False):
         })
         passers = get_passers()
         if passers:
-            message_data['message']['text'] = create_insult(passers) + ', so it\'s '
-            'your turn to empty me today.'
+            message_data['message']['text'] = create_insult(passers) +
+            ', so it\'s your turn to empty me today.'
 
     call_send_API(message_data)
 
