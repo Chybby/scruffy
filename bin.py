@@ -169,13 +169,7 @@ def add_to_roster(user_id):
     def _add_to_roster(pipe):
         roster = pipe.lrange(REDIS_ROSTER, 0, -1)
         if user_id not in roster:
-            if roster:
-                roster_head = pipe.lindex(REDIS_ROSTER, 0)
-            pipe.multi()
-            pipe.lpop(REDIS_ROSTER)
-            pipe.lpush(REDIS_ROSTER, user_id)
-            if roster:
-                pipe.lpush(REDIS_ROSTER, roster_head)
+            pipe.rpush(REDIS_ROSTER, user_id)
             FnScope.was_added = True
 
     get_redis().transaction(_add_to_roster, REDIS_ROSTER)
