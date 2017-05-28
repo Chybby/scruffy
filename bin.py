@@ -3,6 +3,7 @@ from __future__ import (
     print_function,
 )
 
+import hmac
 import json
 import requests
 import random
@@ -19,6 +20,7 @@ from redis import StrictRedis
 from wit import Wit
 
 from config import (
+    APP_SECRET,
     REDIS_PORT,
     VERIFY_TOKEN,
     PAGE_ACCESS_TOKEN,
@@ -440,6 +442,28 @@ def process_message(message):
         # thumbs up sticker
         get_wit().run_actions(session_id, '(y)', {})
 
+
+def verify(data, header, app_secret_key):
+    """
+    This function will verify the integrity and authenticity of the data received
+
+    :param data: data received from facebook
+    :param header: headers of the request
+    :param app_secret_key: facebook app secret key. You can find it on your app page
+    :return: True if signature matches else returns false
+
+    """
+    X_hub_sign = header["X-Hub-Signature"]
+    method, sign = X_hub_sign.split("=")
+    """
+    Now a key will be created of data using app secret as the key.
+    And compared with xsignature found in the the headers of the request.
+    If both the keys match then the function will run further otherwise it will halt
+    """
+    hmac_object = hmac.new(app_secret_key.encode("utf-8"), data, "sha1")
+    key = hmac_object.hexdigest()
+    return hmac.compare_digest(sign, key)
+
 ###
 #
 # Flask Routes
@@ -454,6 +478,11 @@ def index():
 
 @app.route('/webhook', methods=['POST'])
 def receive_message():
+    header = request.headers
+    data = request.get_data()
+    if not verify(data, header, APP_SECRET):
+        return ''
+
     data = request.get_json()
     if (data['object'] == 'page'):
         for entry in data['entry']:
