@@ -3,6 +3,7 @@ from __future__ import (
     print_function,
 )
 
+import hashlib
 import hmac
 import json
 import requests
@@ -444,7 +445,7 @@ def process_message(message):
 
 
 def verify(data, header, app_secret_key):
-    """
+    '''
     This function will verify the integrity and authenticity of the data received
 
     :param data: data received from facebook
@@ -452,17 +453,17 @@ def verify(data, header, app_secret_key):
     :param app_secret_key: facebook app secret key. You can find it on your app page
     :return: True if signature matches else returns false
 
-    """
-    X_hub_sign = header["X-Hub-Signature"]
-    method, sign = X_hub_sign.split("=")
-    """
+    '''
+    X_hub_sign = header['X-Hub-Signature']
+    method, sign = X_hub_sign.split('=')
+    '''
     Now a key will be created of data using app secret as the key.
     And compared with xsignature found in the the headers of the request.
     If both the keys match then the function will run further otherwise it will halt
-    """
-    hmac_object = hmac.new(app_secret_key.encode("utf-8"), data, "sha1")
+    '''
+    hmac_object = hmac.new(app_secret_key.encode('utf-8'), data, hashlib.sha1)
     key = hmac_object.hexdigest()
-    return hmac.compare_digest(sign, key)
+    return hmac.compare_digest(sign.encode('utf-8'), key)
 
 ###
 #
