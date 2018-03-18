@@ -1,0 +1,16 @@
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /send_notification
+  script: scruffy.app
+  login: admin
+- url: /check_bins_done
+  script: scruffy.app
+  login: admin
+- url: /send_reminder
+  script: scruffy.app
+  login: admin
+- url: /.*
+  script: scruffy.app

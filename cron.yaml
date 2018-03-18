@@ -1,0 +1,13 @@
+cron:
+- description: "Send bin notification on Wednesday evening"
+  url: /send_notification
+  schedule: every wednesday 18:00
+  timezone: Australia/NSW
+- description: "Check if bins were done every evening"
+  url: /check_bins_done
+  schedule: every day 18:00
+  timezone: Australia/NSW
+- description: "Send reminder in the morning"
+  url: /send_notification
+  schedule: every day 09:00
+  timezone: Australia/NSW
